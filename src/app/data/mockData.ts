@@ -16,6 +16,7 @@ export interface Complaint {
   citizenId: string;
   assignedTo?: string;
   comments: Comment[];
+  _dbId?: string;
 }
 
 export interface Comment {

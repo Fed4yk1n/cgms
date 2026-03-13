@@ -1,18 +1,12 @@
+import { useState, useEffect } from 'react';
 import { Users, ClipboardList, Clock, Server, UserCheck, CheckCircle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { chartBarData, chartLineData, chartPieData, activityFeed } from '../../data/mockData';
-
-const stats = [
-  { label: 'Total Users', value: '1,247', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+12%' },
-  { label: 'Active Officials', value: '38', icon: UserCheck, color: 'text-teal-600', bg: 'bg-teal-50', trend: '+2' },
-  { label: 'Total Complaints', value: '347', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: '+23' },
-  { label: 'Pending Complaints', value: '87', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', trend: '-5' },
-  { label: 'Resolved This Month', value: '142', icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', trend: '+18%' },
-  { label: 'System Uptime', value: '99.9%', icon: Server, color: 'text-purple-600', bg: 'bg-purple-50', trend: 'Stable' },
-];
+import { getComplaintStats } from '../../services/complaints.service';
+import { getUsers } from '../../services/users.service';
 
 const activityColor: Record<string, string> = {
   submit: 'bg-blue-100 text-blue-700',
@@ -24,6 +18,33 @@ const activityColor: Record<string, string> = {
 };
 
 export function AdminDashboard() {
+  const [dashStats, setDashStats] = useState({
+    totalUsers: 0, activeOfficials: 0, totalComplaints: 0,
+    pendingComplaints: 0, resolvedThisMonth: 0,
+  });
+
+  useEffect(() => {
+    async function load() {
+      const [cStats, users] = await Promise.all([getComplaintStats(), getUsers()]);
+      setDashStats({
+        totalUsers: users.length,
+        activeOfficials: users.filter(u => u.role === 'Official' && u.status === 'Active').length,
+        totalComplaints: cStats.total,
+        pendingComplaints: cStats.pending,
+        resolvedThisMonth: cStats.resolved,
+      });
+    }
+    load();
+  }, []);
+
+  const stats = [
+    { label: 'Total Users', value: String(dashStats.totalUsers), icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+12%' },
+    { label: 'Active Officials', value: String(dashStats.activeOfficials), icon: UserCheck, color: 'text-teal-600', bg: 'bg-teal-50', trend: '+2' },
+    { label: 'Total Complaints', value: String(dashStats.totalComplaints), icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: '+23' },
+    { label: 'Pending Complaints', value: String(dashStats.pendingComplaints), icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', trend: '-5' },
+    { label: 'Resolved This Month', value: String(dashStats.resolvedThisMonth), icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', trend: '+18%' },
+    { label: 'System Uptime', value: '99.9%', icon: Server, color: 'text-purple-600', bg: 'bg-purple-50', trend: 'Stable' },
+  ];
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">

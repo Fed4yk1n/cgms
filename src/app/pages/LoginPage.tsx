@@ -6,7 +6,7 @@ import { useAuth, type UserRole } from '../contexts/AuthContext';
 type Tab = 'login' | 'register';
 
 export function LoginPage() {
-  const { login, isAuthenticated, user } = useAuth();
+  const { login, register, isAuthenticated, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<Tab>('login');
@@ -47,25 +47,57 @@ export function LoginPage() {
     return { label: 'Strong', color: 'bg-green-500', w: 'w-full' };
   };
 
+  const [loginError, setLoginError] = useState('');
+  const [regError, setRegError] = useState('');
+  const [regSuccess, setRegSuccess] = useState(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 400));
     if (role === 'official' || role === 'admin') {
       setShow2FA(true);
       setLoading(false);
       return;
     }
-    await login(email, password, role);
+    const success = await login(email, password, role);
+    if (!success) setLoginError('Invalid email or password');
     setLoading(false);
   };
 
   const handleVerifyOTP = async () => {
     setLoading(true);
+    setLoginError('');
     await new Promise(r => setTimeout(r, 500));
-    await login(email, password, role);
+    const success = await login(email, password, role);
+    if (!success) setLoginError('Invalid email or password');
     setLoading(false);
     setShow2FA(false);
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError('');
+
+    if (regPass !== regConfirm) {
+      setRegError('Passwords do not match');
+      return;
+    }
+    if (regPass.length < 6) {
+      setRegError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    const result = await register(regName, regEmail, regPass, 'citizen');
+    setLoading(false);
+
+    if (result.success) {
+      setRegSuccess(true);
+    } else {
+      setRegError(result.error || 'Registration failed');
+    }
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -176,6 +208,9 @@ export function LoginPage() {
 
           {tab === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
+              {loginError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{loginError}</div>
+              )}
               {/* Role selector */}
               <div>
                 <label className="text-xs text-gray-500 uppercase tracking-wide mb-1.5 block">Sign in as</label>
@@ -253,8 +288,27 @@ export function LoginPage() {
                 Continue with Google
               </button>
             </form>
+          ) : regSuccess ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Registration Successful!</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Your account has been created. Please check your email for verification, then sign in.
+              </p>
+              <button
+                onClick={() => { setRegSuccess(false); setTab('login'); }}
+                className="w-full h-10 bg-[#1A56DB] text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                Go to Login
+              </button>
+            </div>
           ) : (
-            <form className="space-y-4">
+            <form onSubmit={handleRegister} className="space-y-4">
+              {regError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{regError}</div>
+              )}
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Full Name</label>
                 <div className="relative">
@@ -312,10 +366,10 @@ export function LoginPage() {
               </label>
               <button
                 type="submit"
-                disabled={!agreed}
+                disabled={!agreed || loading}
                 className="w-full h-10 bg-[#1A56DB] text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
               >
-                Create Account
+                {loading ? 'Creating Account...' : 'Create Account'}
               </button>
             </form>
           )}
