@@ -1,18 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Eye, Edit2, Search, Filter } from 'lucide-react';
-import { mockComplaints } from '../../data/mockData';
 import { StatusBadge, PriorityBadge } from '../../components/common/StatusBadge';
-import type { ComplaintStatus } from '../../data/mockData';
+import { useAuth } from '../../contexts/AuthContext';
+import { getComplaintsByUser } from '../../services/complaints.service';
+import type { ComplaintStatus, Complaint } from '../../data/mockData';
 
 const filters: (ComplaintStatus | 'All')[] = ['All', 'Pending', 'In Progress', 'Needs Info', 'Resolved', 'Closed'];
 
 export function MyComplaints() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState<ComplaintStatus | 'All'>('All');
   const [search, setSearch] = useState('');
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = mockComplaints.filter(c => {
+  useEffect(() => {
+    if (!user) return;
+    async function load() {
+      setLoading(true);
+      const data = await getComplaintsByUser(user!.id);
+      setComplaints(data);
+      setLoading(false);
+    }
+    load();
+  }, [user]);
+
+  const filtered = complaints.filter(c => {
     const matchFilter = activeFilter === 'All' || c.status === activeFilter;
     const matchSearch = !search || c.title.toLowerCase().includes(search.toLowerCase()) || c.id.toLowerCase().includes(search.toLowerCase());
     return matchFilter && matchSearch;
@@ -23,7 +38,7 @@ export function MyComplaints() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-gray-900">My Complaints</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{mockComplaints.length} total complaints</p>
+          <p className="text-sm text-gray-500 mt-0.5">{loading ? 'Loading...' : `${complaints.length} total complaints`}</p>
         </div>
         <button
           onClick={() => navigate('/citizen/submit')}

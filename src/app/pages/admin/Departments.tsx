@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, Eye, Building2 } from 'lucide-react';
-import { mockDepartments } from '../../data/mockData';
+import { getDepartments, createDepartment, updateDepartment } from '../../services/departments.service';
+import { toast } from 'sonner';
 import type { Department } from '../../data/mockData';
 
 const deptIcons: Record<string, string> = {
@@ -13,7 +14,8 @@ const deptIcons: Record<string, string> = {
 };
 
 export function Departments() {
-  const [departments, setDepartments] = useState<Department[]>(mockDepartments);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editDept, setEditDept] = useState<Department | null>(null);
 
@@ -21,6 +23,16 @@ export function Departments() {
   const [formCode, setFormCode] = useState('');
   const [formHead, setFormHead] = useState('');
   const [formDesc, setFormDesc] = useState('');
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const data = await getDepartments();
+      setDepartments(data);
+      setLoading(false);
+    }
+    load();
+  }, []);
 
   const openAdd = () => {
     setEditDept(null);
@@ -34,14 +46,25 @@ export function Departments() {
     setShowModal(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (editDept) {
-      setDepartments(prev => prev.map(d => d.id === editDept.id ? { ...d, name: formName, code: formCode, head: formHead, description: formDesc } : d));
+      const success = await updateDepartment(editDept.id, {
+        name: formName, code: formCode, head: formHead, description: formDesc,
+      });
+      if (success) {
+        setDepartments(prev => prev.map(d => d.id === editDept.id
+          ? { ...d, name: formName, code: formCode, head: formHead, description: formDesc }
+          : d));
+        toast.success('Department updated');
+      }
     } else {
-      setDepartments(prev => [...prev, {
-        id: Date.now().toString(), name: formName, code: formCode,
-        head: formHead, complaintsThisMonth: 0, officials: 0, description: formDesc,
-      }]);
+      const newDept = await createDepartment({
+        name: formName, code: formCode, head: formHead, description: formDesc,
+      });
+      if (newDept) {
+        setDepartments(prev => [...prev, newDept]);
+        toast.success('Department created');
+      }
     }
     setShowModal(false);
   };

@@ -1,20 +1,39 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, CheckCircle, Circle, Clock, Send, RefreshCw, Image as ImageIcon } from 'lucide-react';
-import { mockComplaints } from '../../data/mockData';
 import { StatusBadge, PriorityBadge } from '../../components/common/StatusBadge';
+import { useAuth } from '../../contexts/AuthContext';
+import { getComplaintsByUser, addComment as addCommentService } from '../../services/complaints.service';
 import type { Complaint } from '../../data/mockData';
 
 const statusSteps = ['Submitted', 'Verified', 'In Progress', 'Pending Review', 'Closed'];
 
 export function TrackComplaint() {
+  const { user } = useAuth();
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<Complaint | null>(mockComplaints[0]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [selected, setSelected] = useState<Complaint | null>(null);
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState(mockComplaints[0]?.comments ?? []);
+  const [comments, setComments] = useState<Complaint['comments']>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    async function load() {
+      setLoading(true);
+      const data = await getComplaintsByUser(user!.id);
+      setComplaints(data);
+      if (data.length > 0) {
+        setSelected(data[0]);
+        setComments(data[0].comments);
+      }
+      setLoading(false);
+    }
+    load();
+  }, [user]);
 
   const results = query
-    ? mockComplaints.filter(c => c.id.toLowerCase().includes(query.toLowerCase()) || c.title.toLowerCase().includes(query.toLowerCase()))
-    : mockComplaints;
+    ? complaints.filter(c => c.id.toLowerCase().includes(query.toLowerCase()) || c.title.toLowerCase().includes(query.toLowerCase()))
+    : complaints;
 
   const getStepIndex = (complaint: Complaint) => {
     const map: Record<string, number> = {
@@ -34,15 +53,17 @@ export function TrackComplaint() {
     setComment('');
   };
 
-  const handleSendComment = () => {
-    if (!comment.trim()) return;
-    setComments(prev => [...prev, {
-      id: Date.now().toString(),
-      author: 'Rahul Sharma',
-      role: 'Citizen',
-      message: comment,
-      timestamp: 'Just now',
-    }]);
+  const handleSendComment = async () => {
+    if (!comment.trim() || !selected || !user) return;
+    const newComment = await addCommentService(
+      selected._dbId || selected.id,
+      user.name,
+      'Citizen',
+      comment,
+    );
+    if (newComment) {
+      setComments(prev => [...prev, newComment]);
+    }
     setComment('');
   };
 

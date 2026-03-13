@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ClipboardList, CheckCircle, Clock, TrendingUp, Eye, Check, Edit2, Info, Star, X, ChevronRight } from 'lucide-react';
-import { mockAllComplaints } from '../../data/mockData';
 import { StatusBadge, PriorityBadge } from '../../components/common/StatusBadge';
 import { useAuth } from '../../contexts/AuthContext';
+import { getAllComplaints, updateComplaintStatus, addComment } from '../../services/complaints.service';
+import { toast } from 'sonner';
 import type { Complaint, ComplaintStatus } from '../../data/mockData';
 
 const filters: (ComplaintStatus | 'All')[] = ['All', 'Pending', 'In Progress', 'Needs Info', 'Resolved'];
@@ -16,7 +17,18 @@ export function OfficialDashboard() {
   const [rating, setRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [showFeedback, setShowFeedback] = useState(false);
-  const [complaints, setComplaints] = useState(mockAllComplaints);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const data = await getAllComplaints();
+      setComplaints(data);
+      setLoading(false);
+    }
+    load();
+  }, []);
 
   const assigned = complaints.filter(c => c.assignedTo === user?.name || !c.assignedTo);
   const pending = complaints.filter(c => c.status === 'Pending').length;
@@ -31,10 +43,40 @@ export function OfficialDashboard() {
 
   const filtered = complaints.filter(c => activeFilter === 'All' || c.status === activeFilter);
 
-  const handleUpdateStatus = () => {
-    if (!selectedComplaint) return;
-    setComplaints(prev => prev.map(c => c.id === selectedComplaint.id ? { ...c, status: statusUpdate } : c));
-    setSelectedComplaint(prev => prev ? { ...prev, status: statusUpdate } : null);
+  const handleUpdateStatus = async () => {
+    if (!selectedComplaint || !user) return;
+    const success = await updateComplaintStatus(selectedComplaint.id, statusUpdate, user.name);
+    if (success) {
+      setComplaints(prev => prev.map(c => c.id === selectedComplaint.id ? { ...c, status: statusUpdate } : c));
+      setSelectedComplaint(prev => prev ? { ...prev, status: statusUpdate } : null);
+      if (note.trim()) {
+        await addComment(selectedComplaint._dbId || selectedComplaint.id, user.name, 'Official', note);
+        setNote('');
+      }
+      toast.success(`Status updated to "${statusUpdate}"`);
+    } else {
+      toast.error('Failed to update status');
+    }
+  };
+
+  const handleRequestInfo = async () => {
+    if (!selectedComplaint || !user) return;
+    const success = await updateComplaintStatus(selectedComplaint.id, 'Needs Info');
+    if (success) {
+      setComplaints(prev => prev.map(c => c.id === selectedComplaint.id ? { ...c, status: 'Needs Info' as ComplaintStatus } : c));
+      setSelectedComplaint(prev => prev ? { ...prev, status: 'Needs Info' as ComplaintStatus } : null);
+      toast.success('Requested additional information from citizen');
+    }
+  };
+
+  const handleCloseComplaint = async () => {
+    if (!selectedComplaint || !user) return;
+    const success = await updateComplaintStatus(selectedComplaint.id, 'Closed');
+    if (success) {
+      setComplaints(prev => prev.map(c => c.id === selectedComplaint.id ? { ...c, status: 'Closed' as ComplaintStatus } : c));
+      setSelectedComplaint(null);
+      toast.success('Complaint closed');
+    }
   };
 
   return (
@@ -216,7 +258,7 @@ export function OfficialDashboard() {
             <div className="p-5 border-t border-gray-100 space-y-2">
               <div className="flex gap-2">
                 <button
-                  onClick={() => {}}
+                  onClick={handleRequestInfo}
                   className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 flex items-center justify-center gap-1"
                 >
                   <Info className="w-3.5 h-3.5" /> Request Info
@@ -235,7 +277,7 @@ export function OfficialDashboard() {
                 >
                   <Star className="w-3.5 h-3.5" /> Feedback
                 </button>
-                <button className="flex-1 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 flex items-center justify-center gap-1">
+                <button onClick={handleCloseComplaint} className="flex-1 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 flex items-center justify-center gap-1">
                   <X className="w-3.5 h-3.5" /> Close Complaint
                 </button>
               </div>

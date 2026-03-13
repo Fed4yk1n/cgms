@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, Clock, Filter } from 'lucide-react';
-import { mockUsers } from '../../data/mockData';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { getUsers, updateUser, deleteUser as deleteUserService, toggleUserStatus } from '../../services/users.service';
+import { toast } from 'sonner';
 import type { AppUser } from '../../data/mockData';
 
 type RoleFilter = 'All' | 'Citizen' | 'Official' | 'Admin';
@@ -20,7 +21,8 @@ const statusBadge: Record<string, string> = {
 };
 
 export function ManageUsers() {
-  const [users, setUsers] = useState<AppUser[]>(mockUsers);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
@@ -35,6 +37,16 @@ export function ManageUsers() {
   const [formRole, setFormRole] = useState<'Citizen' | 'Official' | 'Admin'>('Citizen');
   const [formDept, setFormDept] = useState('');
   const [formActive, setFormActive] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const data = await getUsers();
+      setUsers(data);
+      setLoading(false);
+    }
+    load();
+  }, []);
 
   const filtered = users.filter(u => {
     const matchSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
@@ -57,31 +69,44 @@ export function ManageUsers() {
     setShowModal(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    const updates = {
+      name: formName, email: formEmail, phone: formPhone,
+      role: formRole, department: formDept, status: (formActive ? 'Active' : 'Inactive') as AppUser['status'],
+    };
     if (editUser) {
-      setUsers(prev => prev.map(u => u.id === editUser.id ? {
-        ...u, name: formName, email: formEmail, phone: formPhone,
-        role: formRole, department: formDept, status: formActive ? 'Active' : 'Inactive',
-      } : u));
+      const success = await updateUser(editUser.id, updates);
+      if (success) {
+        setUsers(prev => prev.map(u => u.id === editUser.id ? { ...u, ...updates } : u));
+        toast.success('User updated');
+      } else {
+        toast.error('Failed to update user');
+      }
     } else {
-      setUsers(prev => [...prev, {
-        id: Date.now().toString(), name: formName, email: formEmail, phone: formPhone,
-        role: formRole, department: formDept, status: formActive ? 'Active' : 'Inactive',
+      const newUser: AppUser = {
+        id: Date.now().toString(), ...updates,
         createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      }]);
+      };
+      setUsers(prev => [...prev, newUser]);
+      toast.success('User added');
     }
     setShowModal(false);
   };
 
-  const handleDelete = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
+  const handleDelete = async (id: string) => {
+    const success = await deleteUserService(id);
+    if (success) {
+      setUsers(prev => prev.filter(u => u.id !== id));
+      toast.success('User deleted');
+    }
     setDeleteConfirm(null);
   };
 
-  const toggleStatus = (id: string) => {
-    setUsers(prev => prev.map(u => u.id === id ? {
-      ...u, status: u.status === 'Active' ? 'Suspended' : 'Active',
-    } as AppUser : u));
+  const toggleStatus = async (id: string) => {
+    const currentUser = users.find(u => u.id === id);
+    if (!currentUser) return;
+    const newStatus = await toggleUserStatus(id, currentUser.status);
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u));
   };
 
   return (

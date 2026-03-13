@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ChevronRight, ChevronLeft, MapPin, Upload, X, CheckCircle, CloudUpload, FileText, Image } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { createComplaint } from '../../services/complaints.service';
+import { toast } from 'sonner';
+import type { ComplaintCategory, ComplaintPriority } from '../../data/mockData';
 
 type Step = 1 | 2 | 3;
 
@@ -17,9 +21,11 @@ interface UploadedFile { name: string; size: string; type: string; preview?: str
 
 export function SubmitComplaint() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [submitted, setSubmitted] = useState(false);
-  const [submittedId] = useState(`CMP-2024-0${Math.floor(Math.random() * 9000 + 1000)}`);
+  const [submittedId, setSubmittedId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   // Step 1
   const [title, setTitle] = useState('');
@@ -59,9 +65,31 @@ export function SubmitComplaint() {
     setFiles(prev => [...prev, ...newFiles]);
   };
 
-  const handleSubmit = () => {
-    if (!confirmed) return;
-    setSubmitted(true);
+  const handleSubmit = async () => {
+    if (!confirmed || !user) return;
+    setSubmitting(true);
+    try {
+      const result = await createComplaint({
+        title,
+        category: category as ComplaintCategory,
+        department,
+        priority: priority as ComplaintPriority,
+        description,
+        location,
+        citizenId: user.id,
+        citizenName: user.name,
+      });
+      if (result) {
+        setSubmittedId(result.id);
+        setSubmitted(true);
+        toast.success('Complaint submitted successfully!');
+      } else {
+        toast.error('Failed to submit complaint. Please try again.');
+      }
+    } catch {
+      toast.error('An error occurred. Please try again.');
+    }
+    setSubmitting(false);
   };
 
   const stepLabels = ['Basic Info', 'Upload Evidence', 'Review & Submit'];
@@ -345,10 +373,10 @@ export function SubmitComplaint() {
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={!confirmed}
+                  disabled={!confirmed || submitting}
                   className="flex items-center gap-2 px-6 py-2 bg-[#1A56DB] text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60"
                 >
-                  <Upload className="w-4 h-4" /> Submit Complaint
+                  <Upload className="w-4 h-4" /> {submitting ? 'Submitting...' : 'Submit Complaint'}
                 </button>
               )}
             </div>

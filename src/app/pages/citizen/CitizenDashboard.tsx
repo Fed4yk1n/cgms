@@ -1,23 +1,54 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { FileText, Clock, CheckCircle, AlertCircle, Plus, Search, Download, Eye, Edit2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { mockComplaints, mockNotifications } from '../../data/mockData';
-import { StatusBadge, PriorityBadge } from '../../components/common/StatusBadge';
+import { StatusBadge } from '../../components/common/StatusBadge';
+import { getComplaintsByUser, getComplaintStats } from '../../services/complaints.service';
+import { getNotifications, markAllNotificationsRead } from '../../services/notifications.service';
+import type { Complaint, NotificationItem } from '../../data/mockData';
 
 export function CitizenDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const total = mockComplaints.length;
-  const pending = mockComplaints.filter(c => c.status === 'Pending').length;
-  const inProgress = mockComplaints.filter(c => c.status === 'In Progress').length;
-  const resolved = mockComplaints.filter(c => c.status === 'Resolved').length;
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [stats, setStats] = useState({ total: 0, pending: 0, inProgress: 0, resolved: 0 });
+  const [loadingData, setLoadingData] = useState(true);
 
-  const stats = [
-    { label: 'Total Complaints', value: total, sub: 'submitted by you', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Pending', value: pending, sub: 'awaiting action', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'In Progress', value: inProgress, sub: 'being resolved', icon: AlertCircle, color: 'text-[#1A56DB]', bg: 'bg-blue-50' },
-    { label: 'Resolved', value: resolved, sub: 'successfully closed', icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
+  useEffect(() => {
+    if (!user) return;
+    async function load() {
+      setLoadingData(true);
+      const [complaintsList, statsData, notifs] = await Promise.all([
+        getComplaintsByUser(user!.id),
+        getComplaintStats(user!.id),
+        getNotifications(user!.id),
+      ]);
+      setComplaints(complaintsList);
+      setStats({
+        total: statsData.total,
+        pending: statsData.pending,
+        inProgress: statsData.inProgress,
+        resolved: statsData.resolved,
+      });
+      setNotifications(notifs);
+      setLoadingData(false);
+    }
+    load();
+  }, [user]);
+
+  const handleMarkAllRead = async () => {
+    if (!user) return;
+    await markAllNotificationsRead(user.id);
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const statCards = [
+    { label: 'Total Complaints', value: stats.total, sub: 'submitted by you', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Pending', value: stats.pending, sub: 'awaiting action', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { label: 'In Progress', value: stats.inProgress, sub: 'being resolved', icon: AlertCircle, color: 'text-[#1A56DB]', bg: 'bg-blue-50' },
+    { label: 'Resolved', value: stats.resolved, sub: 'successfully closed', icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
   ];
 
   return (
@@ -30,7 +61,7 @@ export function CitizenDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {stats.map((s) => (
+        {statCards.map((s) => (
           <div key={s.label} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs text-gray-500 font-medium">{s.label}</span>
@@ -82,7 +113,11 @@ export function CitizenDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {mockComplaints.map((c) => (
+                {loadingData ? (
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">Loading...</td></tr>
+                ) : complaints.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">No complaints yet. Submit your first complaint!</td></tr>
+                ) : complaints.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-4 py-3 text-xs font-mono text-gray-500">{c.id}</td>
                     <td className="px-4 py-3">
@@ -119,7 +154,7 @@ export function CitizenDashboard() {
             </table>
           </div>
           <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-xs text-gray-500">Showing 1–{mockComplaints.length} of {mockComplaints.length}</span>
+            <span className="text-xs text-gray-500">Showing {complaints.length} complaint{complaints.length !== 1 ? 's' : ''}</span>
             <div className="flex gap-1">
               <button className="px-2 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50">Prev</button>
               <button className="px-2 py-1 text-xs border border-[#1A56DB] bg-blue-50 text-[#1A56DB] rounded">1</button>
@@ -132,10 +167,12 @@ export function CitizenDashboard() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-gray-900">Recent Notifications</h3>
-            <button className="text-xs text-blue-600 hover:underline">Mark all read</button>
+            <button onClick={handleMarkAllRead} className="text-xs text-blue-600 hover:underline">Mark all read</button>
           </div>
           <div className="divide-y divide-gray-50">
-            {mockNotifications.map((n) => (
+            {notifications.length === 0 ? (
+              <div className="p-4 text-xs text-gray-400 text-center">No notifications</div>
+            ) : notifications.map((n) => (
               <div key={n.id} className={`p-4 flex items-start gap-3 ${!n.read ? 'bg-blue-50/30' : ''}`}>
                 <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${n.read ? 'bg-gray-300' : 'bg-blue-500'}`} />
                 <div>
